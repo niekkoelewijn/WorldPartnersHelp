@@ -13,8 +13,6 @@
 ## input data from Worldpartners, (2)  preprocessing of other needed geo-data,
 ## and (3) creating the visualizations in leaflet
 
-setwd("~/WorldPartnersHelp")
-
 # Step 1: Preprocessing the input data from Worldpartners
 source("~/WorldPartnersHelp/R/PreprocessWorldpartnersData.R")
 
