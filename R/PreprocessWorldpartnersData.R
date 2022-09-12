@@ -77,47 +77,82 @@ VillageData <- InputData %>%
   # Make sf out of the geocoded tibble
   st_as_sf(coords = c("lng", "lat"), crs = st_crs(4326))
 
-# Get shape of Ukraine
-UkraineBoundaries <- getData('GADM', country='UKR', level=1)
+# Get sum of food delivered per city
+TotalDelivered <- VillageData %>% 
+  
+  # Make the table a tibble again
+  tibble() %>% 
+  
+  # Group by city
+  group_by(`Village/town`) %>% 
+  
+  # Summarise totals per village
+  summarise(`Issuer Organization` = first(`Issuer Organization`),
+            `Total families` = n_distinct(`Family name`),
+            `Total potato (kg)` = sum(`Potato for consumption (in kg)?`),
+            `Vegetables (kg)` = sum(`Vegetables (in kg)?`),
+            `Total potato seeds (kg)` = sum(`Potato seeds (in kg)?`),
+            `Total plant onions seeds (kg)` = sum(`Plant onions seeds (in kg)?`),
+            `Total vegetables seeds (n bags)` = sum(`Vegetables seeds (number of bag of seeds)?`),
+            `Total flower (kg)` = sum(`Flower (in kg)?`),
+            `Total canned fish/meat (n cans)` = sum(`Canned fish/meat (number of cans)?`),
+            `Total salt/sugar (kg)` = sum(`Salt/sugar (in kg)?`),
+            `Total pasta/rice (kg)` = sum(`Pasta/rice (in kg)?`),
+            `Total baby food/milk powder (n cans)` = sum(`Canned baby food or milk powder (number of cans)?`),
+            `Total soup/noodles (n cans)` = sum(`Soup/noodles (number of cans)?`)) %>% 
+  
+  # Join with unique villages for coordinates
+  inner_join(UniqueVillages, by = "Village/town", ) %>% 
+  
+  # Remove column country
+  dplyr::select(-country)
 
-# Get lng and lat from the point dataset
-VillageData$lng <- st_coordinates(VillageData)[,1]
-VillageData$lat <- st_coordinates(VillageData)[,2]
+# Make totals spatial
+TotalPerCity <- st_as_sf(TotalDelivered, coords = c("lng", "lat"), crs = st_crs(4326))
 
-# Visualize villages in Ukraine
-plot(UkraineBoundaries)
-points(x = VillageData$lng, y = VillageData$lat)
+# Visualize
+plot(st_coordinates(TotalPerCity))
+text(x = VillageData$lng, y = VillageData$lat, labels= VillageData$`Village/town`)
 
-# Remove points from Crimea
-Sevastopol <- st_as_sf(UkraineBoundaries[which(UkraineBoundaries$NAME_1=="Sevastopol'"),]) 
-Crimea <- st_as_sf(UkraineBoundaries[which(UkraineBoundaries$NAME_1=="Crimea"),])
-VillageData <- st_as_sf(VillageData)
-VillageData <- atl_filter_bounds(VillageData , x = "lng", y = "lat", 
-                  sf_polygon = Sevastopol, remove_inside = T)
-VillageData <- atl_filter_bounds(VillageData , x = "lng", y = "lat", 
-                                 sf_polygon = Crimea, remove_inside = T)
+# Remove cities with implausible locations
+TotalPerCity <- TotalPerCity[!(TotalPerCity$`Village/town`=="234" | TotalPerCity$`Village/town`=="3"
+                               | TotalPerCity$`Village/town`=="4" | TotalPerCity$`Village/town`=="77"
+                               | TotalPerCity$`Village/town`=="98" | TotalPerCity$`Village/town`== "Білокуракине"
+                               | TotalPerCity$`Village/town`=="Ганусівка" | TotalPerCity$`Village/town`== "Луганськ"
+                               | TotalPerCity$`Village/town`=="Павлівка" | TotalPerCity$`Village/town`=="Демьяновка"
+                               | TotalPerCity$`Village/town`=="Матвеевка" | TotalPerCity$`Village/town`=="Новоалександровка"),]
+
+# Add lgn and lat column to TotalPerCity
+TotalPerCity$x <- st_coordinates(TotalPerCity)[,1]
+TotalPerCity$y <- st_coordinates(TotalPerCity)[,2]
+
+# Add latin city name as column
+TotalPerCity <- TotalPerCity %>% 
+  
+  # Ukrainian cyrillic to latin
+  mutate(VillageNameLatin = stri_trans_general(str = `Village/town`, id = "Ukrainian-Latin/BGN"))
+
+# Rename all TCI locations to "TCI"
+TotalPerCity$`Issuer Organization`[which(TotalPerCity$`Issuer Organization` == "TCI - Chernivtsi")] = "TCI"
+TotalPerCity$`Issuer Organization`[which(TotalPerCity$`Issuer Organization` == "TCI - Ivano-frankivsk")] = "TCI"
+TotalPerCity$`Issuer Organization`[which(TotalPerCity$`Issuer Organization` == "TCI - Mykolajiv")] = "TCI"
+
+## Write pre-processed data to csv
+
+# Create path
+path <- "~/WorldPartnersHelp/GeocodedData/"
+
+# Create directory
+if(!dir.exists(path)){
+  dir.create(path)
+}
+
+# Write total per city to csv
+write_csv(TotalPerCity, file = paste0(path, "TotalsPerCity", ".csv"))
 
 
-# # Load dataset with Ukrainian villages with lat and lon
-# UkraineVillagesDownload <- read_csv("~/WorldPartnersHelp/Data/UA/VillagesLatLon.csv")
-# 
-# # Select and adapt village in piped structure
-# UkraineVillages <- UkraineVillagesDownload %>% 
-#   
-#   # Select columns of importance
-#   select(4,5,6) %>% 
-#   
-#   # drop NA
-#   drop_na() %>% 
-#   
-#   # Rename columns
-#   rename(`Village/town` = "Krasnopartizans'ka,Krasnopartizanskaja,Stancija Krasnopartizans'ka,Stancija Krasnopartizanskaja,Tashli-Dair,Tasli Dayir,Taşlı Dayır,Краснопартизанская,Краснопартизанська,Станция Краснопартизанская,Станція Краснопартизанська,Ташли-Даір",
-#          Lat = "45.40145",
-#          Lon = "34.21635") %>% 
-#   
-#   # Join the two datasets on column `Village/town`
-#   full_join(VillageData, by = "Village/town") %>% 
-#   
-#   # Remove empty dates
-#   drop_na(Date)
 
+## Action points
+# Lijst steden zonder coordinaat uitdraaien
+# Jort omcirkelt verdachte dorpen, die uitdraaien
+# Jonathan integratie interactieve kaart op website
