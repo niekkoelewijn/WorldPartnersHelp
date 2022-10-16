@@ -29,16 +29,13 @@ library(atlastools)
 library(data.table)
 
 # Load the data from the "Data" directory
-InputData <- read_csv(file = "~/WorldPartnersHelp/Data/FoodAidData.csv")
+InputData <- read_csv(file = "~/WorldPartnersHelp/Data/FoodAidDataSept.csv")
 
 # Get unique village names from input data
 UniqueVillages <- InputData %>% 
   
   # Select only villages
   dplyr::select(`Village/town`) %>% 
-  
-  # Group villages
-  group_by(`Village/town`) %>% 
   
   # Get distinct villages
   distinct(`Village/town`) %>% 
@@ -49,17 +46,27 @@ UniqueVillages <- InputData %>%
   # Get lat and lon of village by its name
   geocode(city = `Village/town`, country = country, method = "osm", lat = lat, long = lng )
 
-# Script to prove that there are indeed 999 unique town names  
-# InputDataCopy <- InputData
-# InputDataCopy <- InputDataCopy %>% 
-#   dplyr::select(`Village/town`) %>% 
-#   tibble::add_row(`Village/town` = "Spakenburg")
+# Add coordinates of others to unique villages
+UniqueVillagesWithOthers <- UniqueVillages %>% 
+  mutate(lat = if_else(`Village/town` == "Яковлевка", 49.830881, lat)) %>% 
+  mutate(lng = if_else(`Village/town` == "Яковлевка", 36.135289, lng)) %>% 
+  dplyr::add_row(`Village/town` = 'Others, TCI', lng = 31.9692583, lat = 46.9607107) %>% 
+  dplyr::add_row(`Village/town` = 'Others, Pilgrim - Zaporizja', lng = 35.1806849, lat = 47.8511949) %>% 
+  dplyr::add_row(`Village/town` = 'Others, FriendsExist! - Dubno', lng = 25.7349241, lat = 50.4221361) %>% 
+  dplyr::add_row(`Village/town` = 'Others, New Life Centre - Kyiv', lng = 30.5008256, lat = 50.4502522)
+
+# Get villages that do not have a coordinate
+NoCoordinateVillages <- UniqueVillages %>% 
+  
+  # Select rows with NA for lat and lgn
+  dplyr::filter(is.na(lat))
 
 # Select and adapt data in piped structure
 VillageData <- InputData %>% 
   
   # Select columns of importance
   dplyr::select(Date, "Issuer Organization", "Family name", "Village/town",
+         "Number of people in household", "Of which children (< 18 years)",
          "Potato for consumption (in kg)?", "Vegetables (in kg)?",
          "Potato seeds (in kg)?", "Plant onions seeds (in kg)?",
          "Vegetables seeds (number of bag of seeds)?",
@@ -69,19 +76,30 @@ VillageData <- InputData %>%
          "Soup/noodles (number of cans)?", "Other goods?") %>%
   
   # Join with the table with coordinates for each unique village
-  inner_join(UniqueVillages, by = "Village/town") %>% 
-  
-  # Drop cities that do not have a geographic location
-  drop_na(lat) %>% 
-  
-  # Make sf out of the geocoded tibble
-  st_as_sf(coords = c("lng", "lat"), crs = st_crs(4326))
+  inner_join(UniqueVillages, by = "Village/town")
+
+# Rename all TCI locations to "TCI"
+VillageData$`Issuer Organization`[which(VillageData$`Issuer Organization` == "TCI - Chernivtsi")] = "TCI"
+VillageData$`Issuer Organization`[which(VillageData$`Issuer Organization` == "TCI - Ivano-frankivsk")] = "TCI"
+VillageData$`Issuer Organization`[which(VillageData$`Issuer Organization` == "TCI - Mykolajiv")] = "TCI"
+
+# Rename all cities with no coordinates to "others" and give them the correct coordinates
+VillageData = VillageData %>% 
+  mutate(`Village/town` = if_else(`Issuer Organization` == "TCI" & is.na(lat), "Others, TCI", `Village/town`)) %>% 
+  mutate(`Village/town` = if_else(`Issuer Organization` == "Pilgrim - Zaporizja" & is.na(lat), "Others, Pilgrim - Zaporizja", `Village/town`)) %>% 
+  mutate(`Village/town` = if_else(`Issuer Organization` == "FriendsExist! - Dubno" & is.na(lat), "Others, FriendsExist! - Dubno", `Village/town`)) %>% 
+  mutate(`Village/town` = if_else(`Issuer Organization` == "New Life Centre - Kyiv" & is.na(lat), "Others, New Life Centre - Kyiv", `Village/town`)) %>%
+  mutate(lat = if_else(is.na(lat) & `Issuer Organization` == "TCI", 31.9692583, lat)) %>% 
+  mutate(lng = if_else(is.na(lng) & `Issuer Organization` == "TCI", 46.9607107, lng)) %>% 
+  mutate(lat = if_else(is.na(lat) & `Issuer Organization` == "Pilgrim - Zaporizja", 35.1806849, lat)) %>% 
+  mutate(lng = if_else(is.na(lng) & `Issuer Organization` == "Pilgrim - Zaporizja", 47.8511949, lng)) %>% 
+  mutate(lat = if_else(is.na(lat) & `Issuer Organization` == "FriendsExist! - Dubno", 25.7349241, lat)) %>% 
+  mutate(lng = if_else(is.na(lng) & `Issuer Organization` == "FriendsExist! - Dubno", 50.4221361, lng)) %>% 
+  mutate(lat = if_else(is.na(lat) & `Issuer Organization` == "New Life Centre - Kyiv", 30.5008256, lat)) %>% 
+  mutate(lng = if_else(is.na(lng) & `Issuer Organization` == "New Life Centre - Kyiv", 50.4502522, lng))  
 
 # Get sum of food delivered per city
 TotalDelivered <- VillageData %>% 
-  
-  # Make the table a tibble again
-  tibble() %>% 
   
   # Group by city
   group_by(`Village/town`) %>% 
@@ -89,6 +107,8 @@ TotalDelivered <- VillageData %>%
   # Summarise totals per village
   summarise(`Issuer Organization` = first(`Issuer Organization`),
             `Total families` = n_distinct(`Family name`),
+            `Total persons` = sum(`Number of people in household`),
+            `Total children` = sum(`Of which children (< 18 years)`),
             `Total potato (kg)` = sum(`Potato for consumption (in kg)?`),
             `Vegetables (kg)` = sum(`Vegetables (in kg)?`),
             `Total potato seeds (kg)` = sum(`Potato seeds (in kg)?`),
@@ -102,57 +122,218 @@ TotalDelivered <- VillageData %>%
             `Total soup/noodles (n cans)` = sum(`Soup/noodles (number of cans)?`)) %>% 
   
   # Join with unique villages for coordinates
-  inner_join(UniqueVillages, by = "Village/town", ) %>% 
+  inner_join(UniqueVillagesWithOthers, by = "Village/town", ) %>% 
   
   # Remove column country
   dplyr::select(-country)
 
+# Rename all rows of TCI villages where only 1 family received aid to "Others, TCI"
+TotalDelivered <- TotalDelivered %>% 
+  mutate(`Village/town` = if_else((`Total families` == 1 | `Total families` == 2) & `Issuer Organization` == "TCI", "Others, TCI", `Village/town`)) %>% 
+  mutate(lat = if_else(`Village/town` == "Others, TCI", 31.9692583, lat)) %>% 
+  mutate(lng = if_else(`Village/town` == "Others, TCI", 46.9607107, lng))
+
+# Group cities again
+TotalDelivered <- TotalDelivered %>% 
+  
+  # Group by city
+  group_by(`Village/town`) %>% 
+  
+  # Summarise totals per village
+  summarise(`Issuer Organization` = first(`Issuer Organization`),
+            `Total families` = sum(`Total families`),
+            `Total persons` = sum(`Total persons`),
+            `Total children` = sum(`Total children`),
+            `Total potato (kg)` = sum(`Total potato (kg)`),
+            `Vegetables (kg)` = sum(`Vegetables (kg)`),
+            `Total potato seeds (kg)` = sum(`Total potato seeds (kg)`),
+            `Total plant onions seeds (kg)` = sum(`Total plant onions seeds (kg)`),
+            `Total vegetables seeds (n bags)` = sum(`Total vegetables seeds (n bags)`),
+            `Total flower (kg)` = sum(`Total flower (kg)`),
+            `Total canned fish/meat (n cans)` = sum(`Total canned fish/meat (n cans)`),
+            `Total salt/sugar (kg)` = sum(`Total salt/sugar (kg)`),
+            `Total pasta/rice (kg)` = sum(`Total pasta/rice (kg)`),
+            `Total baby food/milk powder (n cans)` = sum(`Total baby food/milk powder (n cans)`),
+            `Total soup/noodles (n cans)` = sum(`Total soup/noodles (n cans)`)) %>% 
+  
+  # Join with unique villages for coordinates
+  inner_join(UniqueVillagesWithOthers, by = "Village/town", )
+
 # Make totals spatial
 TotalPerCity <- st_as_sf(TotalDelivered, coords = c("lng", "lat"), crs = st_crs(4326))
 
-# Visualize
-plot(st_coordinates(TotalPerCity))
-text(x = VillageData$lng, y = VillageData$lat, labels= VillageData$`Village/town`)
-
-# Remove cities with implausible locations
+# Remove cities with weird names or locations
 TotalPerCity <- TotalPerCity[!(TotalPerCity$`Village/town`=="234" | TotalPerCity$`Village/town`=="3"
                                | TotalPerCity$`Village/town`=="4" | TotalPerCity$`Village/town`=="77"
                                | TotalPerCity$`Village/town`=="98" | TotalPerCity$`Village/town`== "Білокуракине"
                                | TotalPerCity$`Village/town`=="Ганусівка" | TotalPerCity$`Village/town`== "Луганськ"
                                | TotalPerCity$`Village/town`=="Павлівка" | TotalPerCity$`Village/town`=="Демьяновка"
-                               | TotalPerCity$`Village/town`=="Матвеевка" | TotalPerCity$`Village/town`=="Новоалександровка"),]
+                               | TotalPerCity$`Village/town`=="Матвеевка" | TotalPerCity$`Village/town`=="Новоалександровка"
+                               | TotalPerCity$`Village/town`=="Н"),]
 
 # Add lgn and lat column to TotalPerCity
 TotalPerCity$x <- st_coordinates(TotalPerCity)[,1]
 TotalPerCity$y <- st_coordinates(TotalPerCity)[,2]
 
 # Add latin city name as column
-TotalPerCity <- TotalPerCity %>% 
+TotalPerCityLatine <- TotalPerCity %>% 
   
   # Ukrainian cyrillic to latin
   mutate(VillageNameLatin = stri_trans_general(str = `Village/town`, id = "Ukrainian-Latin/BGN"))
 
-# Rename all TCI locations to "TCI"
-TotalPerCity$`Issuer Organization`[which(TotalPerCity$`Issuer Organization` == "TCI - Chernivtsi")] = "TCI"
-TotalPerCity$`Issuer Organization`[which(TotalPerCity$`Issuer Organization` == "TCI - Ivano-frankivsk")] = "TCI"
-TotalPerCity$`Issuer Organization`[which(TotalPerCity$`Issuer Organization` == "TCI - Mykolajiv")] = "TCI"
+# Pilgrim - Zaporizja has made some mistakes in the pasta/rice data. I change the 
+# weirdest 17 ones to 0, to get more normal values
+TotalPerCityCorrection <- TotalPerCityLatine %>% 
+  dplyr::mutate(`Total pasta/rice (kg)` = if_else(`Total pasta/rice (kg)` > 10000, 0, `Total pasta/rice (kg)`)) %>% 
+  dplyr::mutate(`Total pasta/rice (kg)` = if_else(`Village/town` == "Others, Pilgrim - Zaporizja", 1470, `Total pasta/rice (kg)`))
+
+# Visualize
+plot(st_coordinates(TotalPerCityCorrection))
+
+# Get list of villages/towns on implausible locations
+ImplausibleLocations <- TotalPerCity %>% 
+  
+  # Filter all rows with implausible lng and lat
+  dplyr::filter(`Village/town` == "Великий курінь" |
+                  `Village/town` == "Зарічне" |
+                  `Village/town` == "Залішани"|
+                  `Village/town` == "Кузьмівка"|
+                  `Village/town` == "Славне"|
+                  `Village/town` == "Мар'янівка"|
+                  `Village/town` == "Соснівка"|
+                  `Village/town` == "Соколивка"|
+                  `Village/town` == "Круча"|
+                  `Village/town` == "Городок"|
+                  `Village/town` == "Болотна"|
+                  `Village/town` == "Бортники"|
+                  `Village/town` == "Великий"|
+                  `Village/town` == "Максимовичі"|
+                  `Village/town` == "Поляна"|
+                  `Village/town` == "Мирча"|
+                  `Village/town` == "Іванівці"|
+                  `Village/town` == "Заріччя"|
+                  `Village/town` == "Тарасівка"|
+                  `Village/town` == "Плоска"|
+                  `Village/town` == "Макарівка"|
+                  `Village/town` == "Губин"|
+                  `Village/town` == "Мостище"|
+                  `Village/town` == "Н"|
+                  `Village/town` == "Новоукраїнка"|
+                  `Village/town` == "Доманівка"|
+                  `Village/town` == "Привільне"|
+                  `Village/town` == "Заводской район"|
+                  `Village/town` == "Чернігів"|
+                  `Village/town` == "Киселівка"|
+                  `Village/town` == "Н-ОЛЕКСАНДРІВКА"|
+                  `Village/town` == "Зоряне"|
+                  `Village/town` == "Зелений гай"|
+                  `Village/town` == "Суми"|
+                  `Village/town` == "Новопетровка"|
+                  `Village/town` == "Бахмут"|
+                  `Village/town` == "Часів Яр"|
+                  `Village/town` == "Торецьк"|
+                  `Village/town` == "Авдіївка"|
+                  `Village/town` == "Донецьк"|
+                  `Village/town` == "Макіївка"|
+                  `Village/town` == "Межове"|
+                  `Village/town` == "Сніжне"|
+                  `Village/town` == "Гірськє"|
+                  `Village/town` == "Голубівка"|
+                  `Village/town` == "Попасна"|
+                  `Village/town` == "Калинове"|
+                  `Village/town` == "Артемівськ"|
+                  `Village/town` == "Перевальськ"|
+                  `Village/town` == "Федорівка"|
+                  `Village/town` == "Маріуполь"|
+                  `Village/town` == "Бердянськ")
+
+## Split implausible location city list per issuer organization
+
+# TCI
+TCIImplausibleLocations <- ImplausibleLocations %>% 
+  
+  # Select TCI
+  filter(`Issuer Organization` == "TCI")
+
+# FriendsExist!
+FriendsExistImplausibleLocations <- ImplausibleLocations %>% 
+  
+  # Select FriendsExist
+  filter(`Issuer Organization` == "FriendsExist! - Dubno")
+
+# Pilgrim
+PilgrimImplausibleLocations <- ImplausibleLocations %>% 
+  
+  # Select Pilgrim
+  filter(`Issuer Organization` == "Pilgrim - Zaporizja")
+
+# New Life Centre
+NewLifeCentreImplausibleLocations <- ImplausibleLocations %>% 
+  
+  # Select New Life Centre
+  filter(`Issuer Organization` == "New Life Centre - Kyiv")
+
+
+## Get data per Issuer Organization
+
+# Summarize all data per Issuer Organization
+IssuerOrganizationSummary <- TotalPerCityCorrection %>% 
+  
+  # Group by city
+  group_by(`Issuer Organization`) %>% 
+  
+  # Summarise totals per village
+  summarise(`Total families` = sum(`Total families`),
+            `Total persons` = sum(`Total persons`),
+            `Total children` = sum(`Total children`),
+            `Total potato (kg)` = sum(`Total potato (kg)`),
+            `Vegetables (kg)` = sum(`Vegetables (kg)`),
+            `Total potato seeds (kg)` = sum(`Total potato seeds (kg)`),
+            `Total plant onions seeds (kg)` = sum(`Total plant onions seeds (kg)`),
+            `Total vegetables seeds (n bags)` = sum(`Total vegetables seeds (n bags)`),
+            `Total flower (kg)` = sum(`Total flower (kg)`),
+            `Total canned fish/meat (n cans)` = sum(`Total canned fish/meat (n cans)`),
+            `Total salt/sugar (kg)` = sum(`Total salt/sugar (kg)`),
+            `Total pasta/rice (kg)` = sum(`Total pasta/rice (kg)`),
+            `Total baby food/milk powder (n cans)` = sum(`Total baby food/milk powder (n cans)`),
+            `Total soup/noodles (n cans)` = sum(`Total soup/noodles (n cans)`)) %>% 
+  
+  # Remove redundant geometry column
+  tibble() %>% 
+  dplyr::select(-geometry)
+
+# Add lgn and lat column to TotalPerCity
+IssuerOrganizationSummary$x <- c(25.73432, 30.523333, 35.19031, 32.0) 
+IssuerOrganizationSummary$y <- c(50.41694, 50.450001, 47.82289, 46.9666628)
+
 
 ## Write pre-processed data to csv
 
 # Create path
-path <- "~/WorldPartnersHelp/GeocodedData/"
+path <- "~/WorldPartnersHelp/Output/"
 
 # Create directory
 if(!dir.exists(path)){
   dir.create(path)
 }
 
-# Write total per city to csv
-write_csv(TotalPerCity, file = paste0(path, "TotalsPerCity", ".csv"))
+# Write important datafiles to csv
+write_csv(TotalPerCityCorrection, file = paste0(path, "TotalsPerCity", ".csv"))
+write_csv(NoCoordinateVillages, file = paste0(path, "VillagesWithoutCoordinates", ".csv"))
+write_csv(IssuerOrganizationSummary, file = paste0(path, "IssuerOrganizationData", ".csv"))
+write_csv(TCIImplausibleLocations, file = paste0(path, "TCIImplausibleLocations", ".csv"))
+write_csv(FriendsExistImplausibleLocations, file = paste0(path, "FriendsExistImplausibleLocations", ".csv"))
+write_csv(PilgrimImplausibleLocations, file = paste0(path, "PilgrimImplausibleLocations", ".csv"))
+write_csv(NewLifeCentreImplausibleLocations, file = paste0(path, "NewLifeCentreImplausibleLocations", ".csv"))
 
 
 
 ## Action points
-# Lijst steden zonder coordinaat uitdraaien
-# Jort omcirkelt verdachte dorpen, die uitdraaien
-# Jonathan integratie interactieve kaart op website
+
+# Handmatig alle onwerkelijke rijst/pasta getallen van Pilgrim op 0 zetten.
+# Alle plaatsen met maar 1 familie eruit filteren en alternatief voor bedenken, 
+# bijvoorbeeld samen scharen op puntje ‘overig’. De locaties die nu niet op de 
+# kaart staan door spelfouten zouden dan ook onder ‘overig’ geschaard kunnen worden
+# De locatie van overig kan de stad zijn waar de issuer organization vandaan vertrokken is.
+# Ook aantal 
+
