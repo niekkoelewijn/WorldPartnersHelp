@@ -55,6 +55,50 @@ UniqueVillagesWithOthers <- UniqueVillages %>%
   dplyr::add_row(`Village/town` = 'Others, FriendsExist! - Dubno', lng = 25.7349241, lat = 50.4221361) %>% 
   dplyr::add_row(`Village/town` = 'Others, New Life Centre - Kyiv', lng = 30.5008256, lat = 50.4502522)
 
+# Adapt lat and lng of some villages based on information:
+# Fedorivka (NLC) zou degene bij Kharkiv moeten zijn, nu bij Luhanks
+# Hetzelfde voor Kalynove (Zhovtneve is de naam bij Kharkiv)
+# Ploska (NLC), ligt nu op de Roemeense grens, hoort degene te zijn in Khmelnytskyi Oblast
+# Ivanivtsi (TCI), bij Hongaarde grens, hoort degene te zijn in Ivano-Frankivsk Oblast
+# Myrcha (NLC), bij Slowaakse grens, hoort degene te zijn in Kyiv Oblast.
+# Polyana (TCI), aan Poolse grens, hoort in Mykolaiv Oblast
+# Maksymovychi (NLC), aan Poolse grens, hoort in Kyiv Oblast
+# Horodok (NLC), hoort in Zhitomir Oblast
+# Sosnivka (NLC), hoort in Kyiv Oblast
+# Sokolyvka (Pilgrim), à Kyiv Oblast
+# Mar'yanivka (NLC), à Kyiv Oblast
+# Bolotna (NLC), moet zijn Vulytsya Bolotna in Kyiv Oblast
+# Slavne (Pilgrim), à Zaporizja Oblast
+UniqueVillagesAdapted <- UniqueVillagesWithOthers %>% 
+  mutate(lat = if_else(`Village/town` == "Федорівка", 50.072263, lat)) %>% 
+  mutate(lng = if_else(`Village/town` == "Федорівка", 36.685417, lng)) %>%
+  mutate(lat = if_else(`Village/town` == "Калинове", 49.432298, lat)) %>% 
+  mutate(lng = if_else(`Village/town` == "Калинове", 37.500518, lng)) %>%
+  mutate(`Village/town` = if_else(`Village/town` == "Калинове", "Жовтневе", `Village/town`)) %>% 
+  mutate(lat = if_else(`Village/town` == "Плоска", 50.495908, lat)) %>% 
+  mutate(lng = if_else(`Village/town` == "Плоска", 27.026275, lng)) %>%
+  mutate(lat = if_else(`Village/town` == "Іванівці", 48.576915, lat)) %>% 
+  mutate(lng = if_else(`Village/town` == "Іванівці", 24.844207, lng)) %>%
+  mutate(lat = if_else(`Village/town` == "Мирча", 50.746550, lat)) %>% 
+  mutate(lng = if_else(`Village/town` == "Мирча", 29.833289, lng)) %>%
+  mutate(lat = if_else(`Village/town` == "Поляна", 47.168188, lat)) %>% 
+  mutate(lng = if_else(`Village/town` == "Поляна", 32.677716, lng)) %>%
+  mutate(lat = if_else(`Village/town` == "Максимовичі", 51.194554, lat)) %>% 
+  mutate(lng = if_else(`Village/town` == "Максимовичі", 29.614131, lng)) %>%
+  mutate(lat = if_else(`Village/town` == "Городок", 49.602957, lat)) %>% 
+  mutate(lng = if_else(`Village/town` == "Городок", 29.195572, lng)) %>%
+  mutate(lat = if_else(`Village/town` == "Соснівка", 50.218682, lat)) %>% 
+  mutate(lng = if_else(`Village/town` == "Соснівка", 29.834593, lng)) %>%
+  mutate(lat = if_else(`Village/town` == "Соколивка", 49.906686, lat)) %>% 
+  mutate(lng = if_else(`Village/town` == "Соколивка", 30.207397, lng)) %>%
+  mutate(lat = if_else(`Village/town` == "Мар'янівка", 50.064184, lat)) %>% 
+  mutate(lng = if_else(`Village/town` == "Мар'янівка", 30.170248, lng)) %>%
+  mutate(lat = if_else(`Village/town` == "Болотна", 50.350235, lat)) %>% 
+  mutate(lng = if_else(`Village/town` == "Болотна", 31.328292, lng)) %>%
+  mutate(`Village/town` = if_else(`Village/town` == "Болотна", "вулиця Болотна", `Village/town`)) %>% 
+  mutate(lat = if_else(`Village/town` == "Славне", 47.760471, lat)) %>% 
+  mutate(lng = if_else(`Village/town` == "Славне", 35.687305, lng))
+
 # Get villages that do not have a coordinate
 NoCoordinateVillages <- UniqueVillages %>% 
   
@@ -157,7 +201,7 @@ TotalDelivered <- TotalDelivered %>%
             `Total soup/noodles (n cans)` = sum(`Total soup/noodles (n cans)`)) %>% 
   
   # Join with unique villages for coordinates
-  inner_join(UniqueVillagesWithOthers, by = "Village/town", )
+  inner_join(UniqueVillagesAdapted, by = "Village/town", )
 
 # Make totals spatial
 TotalPerCity <- st_as_sf(TotalDelivered, coords = c("lng", "lat"), crs = st_crs(4326))
@@ -326,14 +370,4 @@ write_csv(FriendsExistImplausibleLocations, file = paste0(path, "FriendsExistImp
 write_csv(PilgrimImplausibleLocations, file = paste0(path, "PilgrimImplausibleLocations", ".csv"))
 write_csv(NewLifeCentreImplausibleLocations, file = paste0(path, "NewLifeCentreImplausibleLocations", ".csv"))
 
-
-
-## Action points
-
-# Handmatig alle onwerkelijke rijst/pasta getallen van Pilgrim op 0 zetten.
-# Alle plaatsen met maar 1 familie eruit filteren en alternatief voor bedenken, 
-# bijvoorbeeld samen scharen op puntje ‘overig’. De locaties die nu niet op de 
-# kaart staan door spelfouten zouden dan ook onder ‘overig’ geschaard kunnen worden
-# De locatie van overig kan de stad zijn waar de issuer organization vandaan vertrokken is.
-# Ook aantal 
 
