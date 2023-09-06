@@ -74,7 +74,6 @@ UniqueVillagesAdapted <- UniqueVillagesWithOthers %>%
   mutate(lng = if_else(`Village/town` == "Федорівка", 36.685417, lng)) %>%
   mutate(lat = if_else(`Village/town` == "Калинове", 49.432298, lat)) %>% 
   mutate(lng = if_else(`Village/town` == "Калинове", 37.500518, lng)) %>%
-  mutate(`Village/town` = if_else(`Village/town` == "Калинове", "Жовтневе", `Village/town`)) %>% 
   mutate(lat = if_else(`Village/town` == "Плоска", 50.495908, lat)) %>% 
   mutate(lng = if_else(`Village/town` == "Плоска", 27.026275, lng)) %>%
   mutate(lat = if_else(`Village/town` == "Іванівці", 48.576915, lat)) %>% 
@@ -94,8 +93,7 @@ UniqueVillagesAdapted <- UniqueVillagesWithOthers %>%
   mutate(lat = if_else(`Village/town` == "Мар'янівка", 50.064184, lat)) %>% 
   mutate(lng = if_else(`Village/town` == "Мар'янівка", 30.170248, lng)) %>%
   mutate(lat = if_else(`Village/town` == "Болотна", 50.350235, lat)) %>% 
-  mutate(lng = if_else(`Village/town` == "Болотна", 31.328292, lng)) %>%
-  mutate(`Village/town` = if_else(`Village/town` == "Болотна", "вулиця Болотна", `Village/town`)) %>% 
+  mutate(lng = if_else(`Village/town` == "Болотна", 31.328292, lng)) %>% 
   mutate(lat = if_else(`Village/town` == "Славне", 47.760471, lat)) %>% 
   mutate(lng = if_else(`Village/town` == "Славне", 35.687305, lng))
 
