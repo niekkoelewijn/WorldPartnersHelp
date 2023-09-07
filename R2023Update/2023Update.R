@@ -78,15 +78,6 @@ UniqueVillagesFood <- FoodAidData %>%
 # # Plot unique villages
 # plot(UniqueVillagesFoodSF["state"], add = T, label = UniqueVillagesFoodSF["Village/town"])
 # 
-# # Translate cyrillic to latin
-# UniqueVillagesFoodLatin <- UniqueVillagesFood %>%
-# 
-#   # Village/town
-#   dplyr::mutate(VillageNameLatin = stri_trans_general(str = `Village/town`, id = "Ukrainian-Latin/BGN")) %>%
-# 
-#   # State
-#   dplyr::mutate(OblastNameLatin = stri_trans_general(str = state, id = "Ukrainian-Latin/BGN"))
-# 
 
 
 ## Farmers
@@ -127,21 +118,32 @@ UniqueVillagesSeed <- SeedAidData %>%
 # 
 # # Plot unique villages
 # plot(UniqueVillagesSeedSF["state"], add = T)
-# 
-# # Translate cyrillic to latin
-# UniqueVillagesSeedLatin <- UniqueVillagesSeed %>%
-# 
-#   # Village/town
-#   dplyr::mutate(VillageNameLatin = stri_trans_general(str = `City/Village`, id = "Ukrainian-Latin/BGN")) %>%
-# 
-#   # State
-#   dplyr::mutate(OblastNameLatin = stri_trans_general(str = state, id = "Ukrainian-Latin/BGN"))
+
 
 
 ### Join coordinate with data
 
 
 ## Households
+
+# Find villages/towns that are situated on illogical places
+UniqueVillagesFood[which(UniqueVillagesFood$lat > 48.961177 &  UniqueVillagesFood$lng < 33.013199),]
+
+# Correct the 4 places that are situated on illogical places
+UniqueVillagesFoodCorrected <- UniqueVillagesFood %>% 
+  
+  # Mutate lat and lng of the 4 places
+  dplyr::mutate(lat = if_else(`Village/town` == "Киселівка" & state == "Ми", 46.645240, lat)) %>% 
+  dplyr::mutate(lat = if_else(`Village/town` == "Запоріжжя" & state == "З", 48.743296, lat)) %>% 
+  dplyr::mutate(lat = if_else(`Village/town` == "Миколаїв" & state == "Миколаїв", 46.645240, lat)) %>% 
+  dplyr::mutate(lat = if_else(`Village/town` == "Михайлівка" & state == "Ми", 46.645240, lat)) %>% 
+  dplyr::mutate(lng = if_else(`Village/town` == "Киселівка" & state == "Ми", 32.626960, lng)) %>% 
+  dplyr::mutate(lng = if_else(`Village/town` == "Запоріжжя" & state == "З", 37.590617, lng)) %>% 
+  dplyr::mutate(lng = if_else(`Village/town` == "Миколаїв" & state == "Миколаїв", 32.626960, lng)) %>% 
+  dplyr::mutate(lng = if_else(`Village/town` == "Михайлівка" & state == "Ми", 32.626960, lng))
+  
+# Check if all villages/towns are on logical places
+UniqueVillagesFoodCorrected[which(UniqueVillagesFoodCorrected$lat > 48.961177 &  UniqueVillagesFoodCorrected$lng < 33.013199),]
 
 # Join food dataset with unique villages with coordinates
 VillageDataHouseholds <- FoodAidData %>% 
@@ -155,7 +157,10 @@ VillageDataHouseholds <- FoodAidData %>%
   dplyr::rename(state = Oblast) %>% 
   
   # Join with the table with coordinates for each unique village
-  inner_join(UniqueVillagesFood, by = c("Village/town", "state"))
+  inner_join(UniqueVillagesFoodCorrected, by = c("Village/town", "state"))
+
+# Check if all villages/ towns are on logical places
+VillageDataHouseholds[which(VillageDataHouseholds$lat > 48.961177 &  VillageDataHouseholds$lng < 33.013199),]
 
 # Rename issuer organizations
 VillageDataHouseholds$`Issuer Organization`[which(VillageDataHouseholds$`Issuer Organization` == "TEAM SOUTH (TCI)")] = "Team South"
@@ -169,37 +174,67 @@ VillageDataHouseholds = VillageDataHouseholds %>%
   mutate(lng = if_else(is.na(lng) & `Issuer Organization` == "Team South", 32.626960, lng)) %>% 
   mutate(lat = if_else(is.na(lat) & `Issuer Organization` == "Team East", 48.743296, lat)) %>% 
   mutate(lng = if_else(is.na(lng) & `Issuer Organization` == "Team East", 37.590617, lng))
+
+# Determine total per city
+TotalVillageHouseholds <- VillageDataHouseholds %>% 
   
+  # Group by city and state
+  group_by(`Village/town`, state) %>% 
+  
+  # Summarise totals per village
+  summarise(`Issuer Organization` = first(`Issuer Organization`),
+            `Total families` = n_distinct(`Family name`),
+            `Total persons` = sum(`Number of people in household`),
+            `Total children` = sum(`Of which children (< 18 years)`),
+            `Total food packages` = sum(`The benficiary receives: /Food package`),
+            `Total seed packages` = sum(`The benficiary receives: /Seed package`)) %>% 
+  
+  # Join with unique villages for coordinates
+  inner_join(UniqueVillagesFoodCorrected, by = c("Village/town","state" ))
 
-## Replace outliers with coordinate of distribution point
+# Check if there are no illogical places in the TotalVillageHouseholds dataset
+TotalVillageHouseholds[which(TotalVillageHouseholds$lat > 48.961177 &  TotalVillageHouseholds$lng < 33.013199),]
 
-# Create a lat and a lng column
-UniqueVillagesFoodCoordinates <- UniqueVillagesFoodSF %>% 
-  dplyr::mutate(lng = st_coordinates(UniqueVillagesFoodSF)[,1],
-                lat = st_coordinates(UniqueVillagesFoodSF)[,2])
+# Make totals spatial
+TotalPerVillage <- st_as_sf(TotalVillageHouseholds, coords = c("lng", "lat"), crs = st_crs(4326))  
 
-# Get outliers by selecting villages outside normal range
-UniqueVillagesFoodCoordinates[which(UniqueVillagesFoodCoordinates$lat > 48.961177 &  UniqueVillagesFoodCoordinates$lng < 33.013199),] %>%
+# Add coordinates
+TotalPerVillage$x <- st_coordinates(TotalPerVillage)[,1]
+TotalPerVillage$y <- st_coordinates(TotalPerVillage)[,2]
 
-  #Village/town
-  dplyr::mutate(VillageNameLatin = stri_trans_general(str = `Village/town`, id = "Ukrainian-Latin/BGN"))
+# Add latin city name as column
+TotalPerVillage <- TotalPerVillage %>% 
+  
+  # Ukrainian cyrillic to latin
+  mutate(VillageNameLatin = stri_trans_general(str = `Village/town`, id = "Ukrainian-Latin/BGN"))
 
-# Replace coordinates of outliers to coordinates of distribution point
-VillageDataHouseholds = VillageDataHouseholds %>% 
-  mutate(`Village/town` = if_else(`Village/town` == "Киселівка" & state == "Ми", "Others, Team South", `Village/town`)) %>% 
-  mutate(`Village/town` = if_else(`Village/town` == "Запоріжжя" & state == "З", "Others, Team East", `Village/town`)) %>% 
-  mutate(`Village/town` = if_else(`Village/town` == "Миколаїв" & state == "Миколаїв", "Others, Team South", `Village/town`)) %>% 
-  mutate(`Village/town` = if_else(`Village/town` == "Михайлівка" & state == "Ми", "Others, Team South", `Village/town`)) %>% 
-  mutate(lat = if_else(`Village/town` == "Others, Team South", 46.645240, lat)) %>% 
-  mutate(lng = if_else(`Village/town` == "Others, Team South", 32.626960, lng)) %>% 
-  mutate(lat = if_else(`Village/town` == "Others, Team East", 48.743296, lat)) %>% 
-  mutate(lng = if_else(`Village/town` == "Others, Team East", 37.590617, lng)) 
 
-# # Visualise VillageDataHouseholds
-# VillageDataHouseholdsSf <- st_as_sf(VillageDataHouseholds, coords = c("lng", "lat"), crs = 4326)
-# 
-# plot(st_geometry(UkraineSf))
-# plot(VillageDataHouseholdsSf["Issuer Organization"], add = T)
+## Get data per Issuer Organization
+
+# Summarize all data per Issuer Organization
+IssuerOrganizationSummary <- TotalPerVillage %>% 
+  
+  # Group by city
+  group_by(`Issuer Organization`) %>% 
+  
+  # Summarise totals per village
+  summarise(`Total families` = sum(`Total families`),
+            `Total persons` = sum(`Total persons`),
+            `Total children` = sum(`Total children`),
+            `Total food packages` = sum(`Total food packages`),
+            `Total seed packages` = sum(`Total seed packages`)) %>% 
+  
+  # Remove redundant geometry column
+  tibble() %>% 
+  dplyr::select(-geometry)
+
+# Add lng and lat column to IssuerOrganizationSummary
+IssuerOrganizationSummary$x <- c(37.590617, 32.626960) 
+IssuerOrganizationSummary$y <- c(48.743296, 46.645240)
+
+# Visualise TotalPerVillage
+plot(st_geometry(UkraineSf))
+plot(TotalPerVillage["Issuer Organization"], add = T)
 
 
 ## Farmers
@@ -209,3 +244,67 @@ VillageDataFarmers <- SeedAidData %>%
 
   # Join with the table with coordinates for each unique village
   inner_join(UniqueVillagesSeed, by = c("City/Village"))
+
+# Latinise farmer villages and oblasts
+VillageDataFarmers <- VillageDataFarmers %>% 
+  
+    # City/Village
+    dplyr::mutate(VillageNameLatin = stri_trans_general(str = `City/Village`, id = "Ukrainian-Latin/BGN")) %>%
+
+    # State
+    dplyr::mutate(OblastNameLatin = stri_trans_general(str = state, id = "Ukrainian-Latin/BGN"))
+
+# Find coordinate for farmers with only the city name, not oblast
+NoCoordinateFarmers <- VillageDataFarmers %>% 
+  
+  # Filter na's
+  dplyr::filter(is.na(lat)) %>% 
+  
+  # Get lat and lon of village by its name
+  geocode(city = `City/Village`, country = country, 
+          method = "osm", lat = lat, long = lng )  %>% 
+  
+  # Select columns to create the same order as VillageDataFarmers
+  dplyr::select(Oblast, `City/Village`, Address, state, country,
+                lat...10, lng...11, VillageNameLatin, OblastNameLatin) %>% 
+  
+  # Rename lat and lng
+  dplyr::rename(lat = lat...10, lng = lng...11)
+
+# Combine VillageDataFarmers and NoCoordinateFarmers
+VillageDataFarmersComplete <- VillageDataFarmers %>% 
+  
+  # Select only villages with coordinate
+  dplyr::filter(!is.na(lat)) %>% 
+  
+  # Combine the rows of the two datasets
+  dplyr::bind_rows(NoCoordinateFarmers)
+
+# Get farmer list without na's
+VillageDataFarmersNoNA<- VillageDataFarmersComplete %>% 
+  
+  # Filter
+  dplyr::filter(!is.na(lat))
+
+# Make data spatial
+VillageDataFarmersCompleteSf <- VillageDataFarmersComplete %>%
+
+  # Remove missing values for coordinates
+  dplyr::filter(!is.na(lat)) %>%
+
+  st_as_sf(coords = c("lng", "lat"), crs = 4326)
+
+# # Create CSV of farmers that still have no coordinate
+# VillageDataFarmersComplete %>% 
+#   
+#   # Filter na's
+#   dplyr::filter(is.na(lat)) %>% 
+#   
+#   # Write csv
+#   write_csv(file = paste0(InputDirectory, "FarmersUnkownLocation.csv"))
+# 
+# # Plot unique villages
+# plot(st_geometry(UkraineSf))
+# plot(VillageDataFarmersCompleteSf["state"], add = T)
+
+

@@ -344,7 +344,7 @@ IssuerOrganizationSummary <- TotalPerCityCorrection %>%
   tibble() %>% 
   dplyr::select(-geometry)
 
-# Add lgn and lat column to TotalPerCity
+# Add lng and lat column to IssuerOrganizationSummary
 IssuerOrganizationSummary$x <- c(25.73432, 30.523333, 35.19031, 32.0) 
 IssuerOrganizationSummary$y <- c(50.41694, 50.450001, 47.82289, 46.9666628)
 
