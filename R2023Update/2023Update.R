@@ -232,9 +232,9 @@ IssuerOrganizationSummary <- TotalPerVillage %>%
 IssuerOrganizationSummary$x <- c(37.590617, 32.626960) 
 IssuerOrganizationSummary$y <- c(48.743296, 46.645240)
 
-# Visualise TotalPerVillage
-plot(st_geometry(UkraineSf))
-plot(TotalPerVillage["Issuer Organization"], add = T)
+# # Visualise TotalPerVillage
+# plot(st_geometry(UkraineSf))
+# plot(TotalPerVillage["Issuer Organization"], add = T)
 
 
 ## Farmers
@@ -306,5 +306,16 @@ VillageDataFarmersCompleteSf <- VillageDataFarmersComplete %>%
 # # Plot unique villages
 # plot(st_geometry(UkraineSf))
 # plot(VillageDataFarmersCompleteSf["state"], add = T)
+
+
+## Write processed data to csv
+
+# Create path
+path <- "~/WorldPartnersHelp/Output2023/"
+
+# Write important datafiles to csv
+write_csv(TotalPerVillage, file = paste0(path, "TotalPerVillageHouseholds", ".csv"))
+write_csv(IssuerOrganizationSummary, file = paste0(path, "IssuerOrganizationHouseholds", ".csv"))
+write_csv(VillageDataFarmersNoNA, file = paste0(path, "VillageDataFarmers", ".csv"))
 
 
