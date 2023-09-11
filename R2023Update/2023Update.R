@@ -102,7 +102,7 @@ UniqueVillagesSeed <- SeedAidData %>%
           method = "osm", lat = lat, long = lng )
 
 
-# # Write UniqueVillagesFood as preliminary result
+# # Write UniqueVillagesSeed as preliminary result
 # write_csv(UniqueVillagesSeed, paste0(InputDirectory, "PreliminaryResults/UniqueVillagesSeed.csv"))
 
 # ## Visualize unique villages seed
@@ -266,10 +266,10 @@ NoCoordinateFarmers <- VillageDataFarmers %>%
   
   # Select columns to create the same order as VillageDataFarmers
   dplyr::select(Oblast, `City/Village`, Address, state, country,
-                lat...10, lng...11, VillageNameLatin, OblastNameLatin) %>% 
+                lat...12, lng...13, VillageNameLatin, OblastNameLatin) %>% 
   
   # Rename lat and lng
-  dplyr::rename(lat = lat...10, lng = lng...11)
+  dplyr::rename(lat = lat...12, lng = lng...13)
 
 # Combine VillageDataFarmers and NoCoordinateFarmers
 VillageDataFarmersComplete <- VillageDataFarmers %>% 
@@ -318,4 +318,26 @@ write_csv(TotalPerVillage, file = paste0(path, "TotalPerVillageHouseholds", ".cs
 write_csv(IssuerOrganizationSummary, file = paste0(path, "IssuerOrganizationHouseholds", ".csv"))
 write_csv(VillageDataFarmersNoNA, file = paste0(path, "VillageDataFarmers", ".csv"))
 
+## Create 2D visuals
 
+# Only total villages
+plot(st_geometry(UkraineSf))
+points(TotalPerVillage$x, TotalPerVillage$y, col = "yellow3")
+legend(title = "Legend","bottomright", legend= c("Households"), col = c("yellow3"),
+       pch= 1, inset=c(-0.22,0), bty = "n",  xpd=TRUE, title.adj = 0.2)
+title(main = "Household beneficiaries")
+
+# Only farmers
+plot(st_geometry(UkraineSf))
+points(VillageDataFarmersNoNA$lng, VillageDataFarmersNoNA$lat, col = "blue")
+legend(title = "Legend","bottomright", legend= c("Farmers"), col = c("blue"),
+       pch= 1, inset=c(-0.22,0), bty = "n",  xpd=TRUE, title.adj = 0.2)
+title(main = "Farmer beneficiaries")
+
+# Both
+plot(st_geometry(UkraineSf))
+points(TotalPerVillage$x, TotalPerVillage$y, col = "yellow3")
+points(VillageDataFarmersNoNA$lng, VillageDataFarmersNoNA$lat, col = "blue")
+legend(title = "Legend","bottomright", legend= c("Households", "Farmers"), col = c("yellow3","blue"),
+       pch= 1, inset=c(-0.22,0), bty = "n",  xpd=TRUE, title.adj = 0.2)
+title(main = "Household and farmer beneficiaries")
